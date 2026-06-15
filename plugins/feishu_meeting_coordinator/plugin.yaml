@@ -1,0 +1,9 @@
+name: feishu_meeting_coordinator
+version: 0.1.0
+description: Feishu meeting RSVP monitoring and follow-up orchestration.
+author: Semantier
+kind: standalone
+platforms:
+  - linux
+  - macos
+  - windows

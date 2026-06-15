@@ -2,15 +2,17 @@
   "source": "static-index",
   "skills": [
     {
-      "id": "chris-han/semantier-skills/skills/productivity/feishu-bot-meeting-coordinator",
-      "name": "Feishu Bot Meeting Coordinator",
-      "description": "Feishu contact lookup, attendee negotiation, and calendar meeting scheduling with requester-aware ownership and bot-calendar fallback.",
+      "id": "chris-han/semantier-skills/plugins/feishu_meeting_coordinator",
+      "name": "feishu_meeting_coordinator",
+      "type": "plugin",
+      "path": "plugins/feishu_meeting_coordinator",
+      "description": "Feishu meeting RSVP monitoring and follow-up orchestration",
       "author": "Semantier",
       "category": "Productivity",
       "tags": ["feishu", "calendar", "meetings", "contacts"],
       "source": "custom-marketplace",
       "trust_level": "community",
-      "homepage": "https://github.com/chris-han/semantier-skills/tree/main/skills/productivity/feishu-bot-meeting-coordinator",
+      "homepage": "https://github.com/chris-han/semantier-skills/tree/main/plugins/feishu_meeting_coordinator",
       "repo": "https://github.com/chris-han/semantier-skills"
     }
   ]
