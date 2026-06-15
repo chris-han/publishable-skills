@@ -101,19 +101,19 @@ python .scripts/feishu-bot-meeting-coordinator/scripts/feishu_bot_api.py search-
 
 This standalone repository is designed so the installable skill lives at:
 
-- `skills/feishu-bot-meeting-coordinator/SKILL.md`
-- `skills/feishu-bot-meeting-coordinator/scripts/feishu_bot_api.py`
+- `skills/productivity/feishu-bot-meeting-coordinator/SKILL.md`
+- `skills/productivity/feishu-bot-meeting-coordinator/scripts/feishu_bot_api.py`
 
 For GitHub-backed installation flows, the canonical identifier after publish is:
 
 ```text
-chris-han/publishable-skills/feishu-bot-meeting-coordinator/skills/feishu-bot-meeting-coordinator
+chris-han/semantier-skills/skills/productivity/feishu-bot-meeting-coordinator
 ```
 
 For raw-URL installation flows, the canonical SKILL path after publish is:
 
 ```text
-https://raw.githubusercontent.com/chris-han/publishable-skills/main/feishu-bot-meeting-coordinator/skills/feishu-bot-meeting-coordinator/SKILL.md
+https://raw.githubusercontent.com/chris-han/semantier-skills/main/skills/productivity/feishu-bot-meeting-coordinator/SKILL.md
 ```
 
 ### Helper API Surface
