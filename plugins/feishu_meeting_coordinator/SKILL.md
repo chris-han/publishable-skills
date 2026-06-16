@@ -17,6 +17,10 @@ tags:
 
 When a user books or updates a Feishu meeting, create or update the calendar event and then call `feishu_meeting_monitor_start` with the returned `event_id`, `calendar_id`, `event_revision_id`, attendees, and captured `creator_delivery_binding`.
 
+Infer meeting parameters from the conversation as much as possible before asking the user. For example, infer title, date, start time, duration/end time, timezone, online meeting format, organizer, and named participants when the user's request is unambiguous. Build an attendee list from invitees only and exclude the requester. If named attendees are not already Feishu `open_id` values or emails, call `feishu_contacts_search` with `attendees` or `queries` so each attendee is searched, then pass the resolved attendee `open_id` values into meeting creation. Ask the user only when a required value is missing or ambiguous, such as multiple matching contacts, unclear date, missing duration/end time, or uncertain attendee identity.
+
+For `feishu_meeting_create` in an active Feishu chat, do not fill `requester_open_id` from an attendee, invitee, meeting calendar, or guessed contact. The tool derives the requester from the Feishu chat initiator.
+
 When a user asks for RSVP status, call live Feishu attendee status first. Do not infer RSVP state from memory.
 
 The plugin handles follow-up reminders, creator escalation, delivery retry, and cron repair.
