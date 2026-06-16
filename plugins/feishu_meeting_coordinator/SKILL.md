@@ -21,4 +21,20 @@ When a user asks for RSVP status, call live Feishu attendee status first. Do not
 
 The plugin handles follow-up reminders, creator escalation, delivery retry, and cron repair.
 
-Use the bundled Feishu helper surfaces for contact lookup, attendee messaging, direct RSVP checks, replacement slot proposals, and meeting-time updates. The returned `user_id` / `message_user_id` values from RSVP lookups are Feishu `open_id` values and can be passed directly into direct-message follow-up tooling.
+Use the registered Feishu tools directly for contact lookup, chat lookup, meeting creation, attendee messaging, direct RSVP checks, replacement slot proposals, and meeting-time updates:
+
+- `feishu_contacts_search`
+- `feishu_chats_search`
+- `feishu_chat_members_get`
+- `feishu_meeting_create`
+- `feishu_meeting_negotiation_start`
+- `feishu_meeting_negotiation_next_round_prompts`
+- `feishu_meeting_negotiation_submit_response`
+- `feishu_meeting_negotiation_finalize`
+- `feishu_meeting_attendee_status_list`
+- `feishu_final_invitations_send`
+- `feishu_attendee_message_send`
+- `feishu_meeting_new_time_propose`
+- `feishu_meeting_time_update`
+
+Do not synthesize terminal commands such as `hermes feishu ...` or `python .../feishu_bot_api.py ...` for normal meeting-coordinator operations. The plugin tools call `scripts/feishu_bot_api.py` directly. The returned `user_id` / `message_user_id` values from RSVP lookups are Feishu `open_id` values and can be passed directly into direct-message follow-up tooling.
