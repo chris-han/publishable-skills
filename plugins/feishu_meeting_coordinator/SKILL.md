@@ -37,4 +37,8 @@ Use the registered Feishu tools directly for contact lookup, chat lookup, meetin
 - `feishu_meeting_new_time_propose`
 - `feishu_meeting_time_update`
 
-Do not synthesize terminal commands such as `hermes feishu ...` or `python .../feishu_bot_api.py ...` for normal meeting-coordinator operations. The plugin tools call `scripts/feishu_bot_api.py` directly. The returned `user_id` / `message_user_id` values from RSVP lookups are Feishu `open_id` values and can be passed directly into direct-message follow-up tooling.
+Do not use terminal, `write_file`, `execute_code`, generated Python, generated shell scripts, raw HTTP calls, or temporary files such as `/tmp/create_feishu_meeting.py` for Feishu meeting, contact, chat, or calendar operations. Do not synthesize commands such as `hermes feishu ...` or `python .../feishu_bot_api.py ...`.
+
+If one of the registered Feishu tools needed for the task is unavailable, stop and report that the Feishu meeting-coordinator tool surface is not loaded. Do not work around the missing tool by generating code at runtime.
+
+The plugin tools call `scripts/feishu_bot_api.py` directly. The returned `user_id` / `message_user_id` values from RSVP lookups are Feishu `open_id` values and can be passed directly into direct-message follow-up tooling.

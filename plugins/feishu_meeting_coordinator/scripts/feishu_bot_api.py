@@ -1,32 +1,12 @@
-"""Feishu Bot Meeting Coordinator Helper Script.
+"""Feishu Bot Meeting Coordinator helper implementation.
 
-ARCHITECTURE CONTRACT (Semantier Deterministic File Ops + Per-Task Sandboxing)
-================================================================================
+This module backs the registered Hermes plugin tools in ``tools.py``. Runtime
+agents must call tools such as ``feishu_contacts_search`` and
+``feishu_meeting_create`` instead of generating Python files, calling raw
+Feishu HTTP endpoints, or shelling out to this module.
 
-This script is a **materialized helper** for the feishu-bot-meeting-coordinator skill.
-
-How it works:
-1. When the skill is invoked, the /agent wrapper layer detects it needs this script.
-2. The wrapper **materializes** this file from:
-   semantier-skills/plugins/feishu_meeting_coordinator/scripts/feishu_bot_api.py
-3. The wrapper copies it to the task sandbox at:
-   .scripts/feishu-bot-meeting-coordinator/scripts/feishu_bot_api.py
-4. The task execution references ONLY the sandboxed path (relative).
-5. When the task completes, the wrapper cleans up the materialized copy.
-
-KEY INVARIANTS:
-- This script is discovered/copied by the wrapper layer, NOT by prompts or manual invocation.
-- Do NOT hardcode absolute system paths in this file.
-- Do NOT assume a fixed location on disk; the script may be materialized anywhere in the sandbox.
-- DO use relative paths or environment discovery (e.g., finding agent/.env via traversal).
-
-USAGE:
-    # Always invoked from the task sandbox as:
-    python .scripts/feishu-bot-meeting-coordinator/scripts/feishu_bot_api.py <command> [args]
-
-    # Example:
-    python .scripts/feishu-bot-meeting-coordinator/scripts/feishu_bot_api.py \
-      search-chats --query "管理层群"
+The command-line entry point is retained only for operator diagnostics and
+local development. It is not part of the agent workflow.
 
 CREDENTIAL LOADING:
     This script reads the active workspace's Feishu bot configuration from the
