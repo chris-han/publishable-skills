@@ -8,7 +8,7 @@ This script is a **materialized helper** for the feishu-bot-meeting-coordinator 
 How it works:
 1. When the skill is invoked, the /agent wrapper layer detects it needs this script.
 2. The wrapper **materializes** this file from:
-   agent/src/skills/app-infra/productivity/feishu-bot-meeting-coordinator/scripts/feishu_bot_api.py
+   semantier-skills/plugins/feishu_meeting_coordinator/scripts/feishu_bot_api.py
 3. The wrapper copies it to the task sandbox at:
    .scripts/feishu-bot-meeting-coordinator/scripts/feishu_bot_api.py
 4. The task execution references ONLY the sandboxed path (relative).

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from .cli import command, register_cli
 from .tools import (
     feishu_meeting_delivery_task_requeue,
@@ -11,6 +13,11 @@ from .tools import (
 
 
 def register(ctx) -> None:
+    ctx.register_skill(
+        name="feishu-bot-meeting-coordinator",
+        path=Path(__file__).with_name("SKILL.md"),
+        description="Book Feishu meetings and start RSVP monitoring via the bundled plugin.",
+    )
     ctx.register_tool(
         name="feishu_meeting_monitor_start",
         handler=feishu_meeting_monitor_start,
