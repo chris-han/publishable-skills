@@ -400,6 +400,49 @@ def _language_from_metadata(metadata: dict[str, Any]) -> str:
     return ""
 
 
+def _requester_display_name_from_metadata(metadata: dict[str, Any]) -> str:
+    for key in (
+        "requester_display_name",
+        "requester_name",
+        "origin_display_name",
+        "origin_user_display_name",
+        "sender_display_name",
+    ):
+        value = _text(metadata.get(key))
+        if value:
+            return value
+    user = metadata.get("user")
+    if isinstance(user, dict):
+        return _text(user.get("display_name") or user.get("name"))
+    return ""
+
+
+def _is_generic_organizer_name(value: Any) -> bool:
+    normalized = _text(value).casefold()
+    return normalized in {"organizer", "组织者", "日程组织者", "会议组织者"}
+
+
+def _requester_display_name_from_contacts(requester_open_id: str) -> str:
+    if not requester_open_id:
+        return ""
+    try:
+        result = _feishu_helper().search_contacts(requester_open_id, limit=1)
+    except Exception:
+        return ""
+    candidates = result.get("candidates") if isinstance(result, dict) else None
+    if not isinstance(candidates, list):
+        return ""
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        if _text(candidate.get("open_id")) != requester_open_id:
+            continue
+        display_name = _text(candidate.get("display_name"))
+        if display_name:
+            return display_name
+    return ""
+
+
 def _current_session_origin_user_id() -> str:
     return _text(_session_metadata().get("origin_user_id"))
 
@@ -560,6 +603,15 @@ def _prepare_monitor_payload(payload: dict[str, Any]) -> dict[str, Any]:
     )
     if not prepared.get("language"):
         prepared["language"] = metadata.get("language") or payload.get("locale") or payload.get("language")
+    payload_organizer_name = _text(payload.get("organizer_name") or payload.get("organizer_identity"))
+    organizer_name = (
+        _requester_display_name_from_metadata(metadata)
+        or _requester_display_name_from_contacts(requester_open_id)
+        or ("" if _is_generic_organizer_name(payload_organizer_name) else payload_organizer_name)
+        or requester_open_id
+    )
+    if organizer_name:
+        prepared["organizer_name"] = organizer_name
     prepared["attendees"] = attendees
     if payload.get("meeting_start_time") is None and payload.get("start_time") is not None:
         prepared["meeting_start_time"] = payload.get("start_time")
@@ -701,6 +753,13 @@ def _start_rsvp_monitor_for_created_meeting(
                 "meeting_start_time": payload.get("start_time"),
                 "meeting_end_time": payload.get("end_time"),
                 "timezone": payload.get("timezone") or "Asia/Shanghai",
+                "organizer_name": meeting.get("organizer_identity") or meeting.get("organizer_name"),
+                "calendar_item_url": (
+                    meeting.get("calendar_assistant_url")
+                    or meeting.get("calendar_item_url")
+                    or meeting.get("event_url")
+                    or meeting.get("join_url")
+                ),
             }
         )
         monitor = _gateway(kwargs).start_monitor(monitor_payload)

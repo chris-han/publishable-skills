@@ -42,6 +42,8 @@ from lark_oapi.api.calendar.v4 import (
     PrimaryCalendarRequestBuilder,
     PrimarysCalendarRequestBuilder,
     PrimarysCalendarRequestBodyBuilder,
+    ReplyCalendarEventRequestBodyBuilder,
+    ReplyCalendarEventRequestBuilder,
     TimeInfoBuilder,
     VchatBuilder,
 )
@@ -255,6 +257,19 @@ def _get_client() -> Client:
             .build()
         )
     return _client_instance
+
+
+def _bot_chat_applink() -> str | None:
+    try:
+        config = _resolve_runtime_feishu_config()
+    except FeishuSkillError:
+        return None
+    bot_open_id = str(config.get("bot_open_id") or "").strip()
+    if not bot_open_id:
+        return None
+    domain = str(config.get("domain") or "feishu").strip().lower() or "feishu"
+    host = "applink.larksuite.com" if domain == "lark" else "applink.feishu.cn"
+    return f"https://{host}/client/chat/open?openId={bot_open_id}"
 
 
 def _unwrap(resp: Any) -> Any:
@@ -618,6 +633,27 @@ def _primary_calendar_id_for_user(user_open_id: str) -> str | None:
         if calendar_id:
             return calendar_id
     return None
+
+
+def _reply_to_calendar_event(
+    *,
+    client: Any,
+    calendar_id: str,
+    event_id: str,
+    rsvp_status: str,
+) -> None:
+    req = (
+        ReplyCalendarEventRequestBuilder()
+        .calendar_id(calendar_id)
+        .event_id(event_id)
+        .request_body(
+            ReplyCalendarEventRequestBodyBuilder()
+            .rsvp_status(rsvp_status)
+            .build()
+        )
+        .build()
+    )
+    _unwrap(client.calendar.v4.calendar_event.reply(req))
 
 
 def start_negotiation(
@@ -1190,6 +1226,17 @@ def create_meeting(
         except FeishuSkillError as exc:
             warnings.append(f"Attendee invitation failed: {exc}")
 
+    if requester_open_id:
+        try:
+            _reply_to_calendar_event(
+                client=client,
+                calendar_id=calendar_id,
+                event_id=event_id,
+                rsvp_status="accepted",
+            )
+        except FeishuSkillError as exc:
+            warnings.append(f"Requester RSVP accept failed: {exc}")
+
     # Use the actual organizer from Feishu response if available.
     resp_organizer = _get_attr(event, "event_organizer")
     organizer_name = str(_get_attr(resp_organizer, "display_name") or requester_display_name).strip()
@@ -1198,6 +1245,8 @@ def create_meeting(
         "organizer_identity": organizer_name,
         "requester_open_id": requester_open_id,
         "calendar_id": str(_get_attr(event, "organizer_calendar_id") or calendar_id),
+        "calendar_assistant_url": _bot_chat_applink(),
+        "calendar_item_url": str(_get_attr(event, "app_link") or "").strip() or None,
         "join_url": str(_get_attr(vchat, "meeting_url") or _get_attr(vchat, "live_link") or "").strip() or None,
         "attendee_results": attendee_results,
         "warnings": warnings,

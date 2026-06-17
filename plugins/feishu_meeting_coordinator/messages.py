@@ -31,6 +31,7 @@ def render_followup_message(
     start_time: str,
     organizer_name: str,
     response_status: str,
+    calendar_item_link: str = "",
     language: str = "en",
 ) -> str:
     return _render(
@@ -41,6 +42,7 @@ def render_followup_message(
             "start_time": start_time,
             "organizer_name": organizer_name,
             "response_status": response_status,
+            "calendar_item_link": calendar_item_link,
         },
         language=language,
     )
