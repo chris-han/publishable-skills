@@ -108,6 +108,28 @@ class _DefaultGateway:
             raise RuntimeError("Semantier gateway binding required")
         return _LocalCronClient(hermes_home)
 
+    def _cron_for_monitor(self, monitor: dict[str, Any] | None) -> _LocalCronClient:
+        binding: dict[str, Any] = {}
+        if monitor:
+            raw_binding = monitor.get("creator_delivery_binding_json")
+            if isinstance(raw_binding, str) and raw_binding.strip():
+                try:
+                    parsed = json.loads(raw_binding)
+                except json.JSONDecodeError:
+                    parsed = {}
+                if isinstance(parsed, dict):
+                    binding = parsed
+            elif isinstance(raw_binding, dict):
+                binding = raw_binding
+        hermes_home = (
+            _text(binding.get("hermes_home"))
+            or _text(_session_metadata().get("hermes_home"))
+            or _session_env("HERMES_SESSION_HERMES_HOME")
+        )
+        if not hermes_home:
+            raise RuntimeError("Semantier gateway binding required")
+        return _LocalCronClient(hermes_home)
+
     def start_monitor(self, payload: dict[str, Any]) -> dict[str, Any]:
         from agents import meeting_coordinator_gateway, meeting_coordinator_store
 
@@ -120,11 +142,14 @@ class _DefaultGateway:
     def monitor_tick(self, payload: dict[str, Any]) -> dict[str, Any]:
         from agents import meeting_coordinator_gateway, meeting_coordinator_store
 
+        store = meeting_coordinator_store.MeetingCoordinatorStore()
+        monitor_id = _text(payload.get("monitor_id"))
+        monitor = store.get_monitor(monitor_id) if monitor_id else None
         return meeting_coordinator_gateway.monitor_tick(
             payload,
-            store=meeting_coordinator_store.MeetingCoordinatorStore(),
+            store=store,
             feishu_client=_FeishuClient(),
-            cron=self._cron(),
+            cron=self._cron_for_monitor(monitor),
         )
 
     def monitor_stop(self, payload: dict[str, Any]) -> dict[str, Any]:

@@ -1074,17 +1074,26 @@ def create_meeting(
                     "display_name": requester_open_id,
                     "open_id": requester_open_id,
                     "match_reason": "requester_implicit",
+                    "rsvp_status": "accepted",
+                    "response_status": "accepted",
                 }
             )
+        for item in attendee_results:
+            if item.get("open_id") == requester_open_id:
+                item["rsvp_status"] = "accepted"
+                item["response_status"] = "accepted"
 
-    attendee_objs = [
-        CalendarEventAttendeeBuilder()
-        .type("user")
-        .user_id(item["user_id"])
-        .is_optional(bool(item.get("is_optional")))
-        .build()
-        for item in resolved_attendees
-    ]
+    attendee_objs = []
+    for item in resolved_attendees:
+        attendee_builder = (
+            CalendarEventAttendeeBuilder()
+            .type("user")
+            .user_id(item["user_id"])
+            .is_optional(bool(item.get("is_optional")))
+        )
+        if requester_open_id and item.get("user_id") == requester_open_id:
+            attendee_builder = attendee_builder.rsvp_status("accepted")
+        attendee_objs.append(attendee_builder.build())
 
     # Determine requester display name for organizer field.
     requester_display_name = requester_open_id
