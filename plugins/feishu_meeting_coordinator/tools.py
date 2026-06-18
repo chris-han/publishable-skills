@@ -88,6 +88,71 @@ class _LocalCronClient:
             )
             return str(job["id"])
 
+    def ensure_monitor_tick_job(
+        self,
+        *,
+        name: str,
+        schedule: str,
+        monitor_id: str,
+        workspace_id: str,
+        event_id: str,
+        calendar_id: str,
+        deliver: str,
+        repeat: int,
+    ) -> str:
+        from agents.meeting_coordinator_gateway import monitor_tick_cron_script
+
+        script_name = f"semantier_meeting_monitor_tick_{monitor_id}.py"
+        script_path = self.hermes_home / "scripts" / script_name
+        script_path.parent.mkdir(parents=True, exist_ok=True)
+        script_path.write_text(
+            monitor_tick_cron_script(
+                monitor_id=monitor_id,
+                workspace_id=workspace_id,
+            ),
+            encoding="utf-8",
+        )
+        try:
+            script_path.chmod(0o700)
+        except OSError:
+            pass
+
+        with self._bind():
+            from cron.jobs import create_job, list_jobs, update_job
+
+            for job in list_jobs(include_disabled=True):
+                if str(job.get("name") or "") != name:
+                    continue
+                job_id = str(job.get("id") or "")
+                updates: dict[str, Any] = {}
+                if job.get("enabled") is False:
+                    updates["enabled"] = True
+                if job.get("no_agent") is not True:
+                    updates["no_agent"] = True
+                if str(job.get("script") or "") != script_name:
+                    updates["script"] = script_name
+                if str(job.get("prompt") or ""):
+                    updates["prompt"] = ""
+                if job.get("skills"):
+                    updates["skills"] = []
+                if job.get("profile"):
+                    updates["profile"] = None
+                if updates:
+                    update_job(job_id, updates)
+                return job_id
+            job = create_job(
+                prompt="",
+                schedule=schedule,
+                name=name,
+                script=script_name,
+                no_agent=True,
+                skills=[],
+                deliver=deliver,
+                repeat=repeat,
+                profile=None,
+            )
+            return str(job["id"])
+
     def job_exists(self, cron_job_id: str) -> bool:
         with self._bind():
             from cron.jobs import list_jobs
