@@ -283,7 +283,13 @@ TOOL_SCHEMAS = {
     ),
     "feishu_meeting_monitor_start": _object_schema(
         {
-            "workspace_id": {"type": "string"},
+            "workspace_id": {
+                "type": "string",
+                "description": (
+                    "trusted gateway/runtime compatibility workspace id. "
+                    "In Feishu sessions, session metadata is authoritative."
+                ),
+            },
             "platform": {"type": "string", "default": "feishu"},
             "event_id": {"type": "string"},
             "event_revision_id": {"type": "string"},
@@ -293,9 +299,15 @@ TOOL_SCHEMAS = {
             "meeting_end_time": {"type": "string"},
             "timezone": {"type": "string", "default": "Asia/Shanghai"},
             "attendees": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
-            "creator_delivery_binding": _CREATOR_BINDING_SCHEMA,
+            "creator_delivery_binding": {
+                **_CREATOR_BINDING_SCHEMA,
+                "description": (
+                    "trusted gateway/runtime compatibility binding. "
+                    "Normal Feishu chat calls omit this and use session metadata."
+                ),
+            },
         },
-        required=("workspace_id", "event_id", "event_revision_id", "calendar_id"),
+        required=("event_id", "event_revision_id", "calendar_id"),
     ),
     "feishu_meeting_monitor_tick": _object_schema(
         {

@@ -1,9 +1,23 @@
+"""Prompt rendering for Feishu meeting coordinator messages.
+
+Set SEMANTIER_MEETING_COORDINATOR_PROMPT_ROOT to the directory containing
+meeting-coordinator prompt assets when this plugin is installed outside the
+repo-local layout.
+"""
+
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 
 def _prompt_root() -> Path:
+    injected = os.environ.get("SEMANTIER_MEETING_COORDINATOR_PROMPT_ROOT")
+    if injected:
+        root = Path(injected).expanduser().resolve()
+        if root.exists():
+            return root
+        raise RuntimeError(f"meeting coordinator prompt root does not exist: {root}")
     for parent in Path(__file__).resolve().parents:
         candidate = parent / "src" / "prompts" / "meeting_coordinator"
         if candidate.exists():

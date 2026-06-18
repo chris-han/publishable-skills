@@ -88,71 +88,6 @@ class _LocalCronClient:
             )
             return str(job["id"])
 
-    def ensure_monitor_tick_job(
-        self,
-        *,
-        name: str,
-        schedule: str,
-        monitor_id: str,
-        workspace_id: str,
-        event_id: str,
-        calendar_id: str,
-        deliver: str,
-        repeat: int,
-    ) -> str:
-        from agents.meeting_coordinator_gateway import monitor_tick_cron_script
-
-        script_name = f"semantier_meeting_monitor_tick_{monitor_id}.py"
-        script_path = self.hermes_home / "scripts" / script_name
-        script_path.parent.mkdir(parents=True, exist_ok=True)
-        script_path.write_text(
-            monitor_tick_cron_script(
-                monitor_id=monitor_id,
-                workspace_id=workspace_id,
-            ),
-            encoding="utf-8",
-        )
-        try:
-            script_path.chmod(0o700)
-        except OSError:
-            pass
-
-        with self._bind():
-            from cron.jobs import create_job, list_jobs, update_job
-
-            for job in list_jobs(include_disabled=True):
-                if str(job.get("name") or "") != name:
-                    continue
-                job_id = str(job.get("id") or "")
-                updates: dict[str, Any] = {}
-                if job.get("enabled") is False:
-                    updates["enabled"] = True
-                if job.get("no_agent") is not True:
-                    updates["no_agent"] = True
-                if str(job.get("script") or "") != script_name:
-                    updates["script"] = script_name
-                if str(job.get("prompt") or ""):
-                    updates["prompt"] = ""
-                if job.get("skills"):
-                    updates["skills"] = []
-                if job.get("profile"):
-                    updates["profile"] = None
-                if updates:
-                    update_job(job_id, updates)
-                return job_id
-            job = create_job(
-                prompt="",
-                schedule=schedule,
-                name=name,
-                script=script_name,
-                no_agent=True,
-                skills=[],
-                deliver=deliver,
-                repeat=repeat,
-                profile=None,
-            )
-            return str(job["id"])
-
     def job_exists(self, cron_job_id: str) -> bool:
         with self._bind():
             from cron.jobs import list_jobs
@@ -640,7 +575,8 @@ def _live_monitor_attendees(payload: dict[str, Any], requester_open_id: str) -> 
 def _prepare_monitor_payload(payload: dict[str, Any]) -> dict[str, Any]:
     metadata = _session_metadata()
     requester_open_id = _text(_requester_open_id(payload))
-    workspace_id = _text(payload.get("workspace_id")) or _workspace_id_from_session(metadata)
+    session_workspace_id = _workspace_id_from_session(metadata)
+    workspace_id = session_workspace_id or _text(payload.get("workspace_id"))
     if not workspace_id:
         raise RuntimeError("workspace_id is required for RSVP monitor start")
     if not requester_open_id:
@@ -664,14 +600,12 @@ def _prepare_monitor_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("at least one non-requester attendee is required for RSVP monitor")
 
     prepared = dict(payload)
+    prepared.pop("scheduler_failure_terminal", None)
     prepared["workspace_id"] = workspace_id
-    prepared["creator_user_id"] = _text(payload.get("creator_user_id")) or requester_open_id
+    prepared["creator_user_id"] = requester_open_id
     prepared["platform"] = _text(payload.get("platform")) or "feishu"
     prepared["event_revision_id"] = _text(payload.get("event_revision_id")) or _text(payload.get("event_id"))
-    prepared["creator_delivery_binding"] = payload.get("creator_delivery_binding") or _creator_delivery_binding(
-        metadata,
-        prepared["creator_user_id"],
-    )
+    prepared["creator_delivery_binding"] = _creator_delivery_binding(metadata, requester_open_id)
     if not prepared.get("language"):
         prepared["language"] = metadata.get("language") or payload.get("locale") or payload.get("language")
     payload_organizer_name = _text(payload.get("organizer_name") or payload.get("organizer_identity"))
@@ -950,9 +884,7 @@ def feishu_meeting_time_update(args, **kwargs):
 
 def feishu_meeting_monitor_start(args, **kwargs):
     try:
-        payload = dict(args or {})
-        if kwargs.get("gateway") is None:
-            payload = _prepare_monitor_payload(payload)
+        payload = _prepare_monitor_payload(dict(args or {}))
         monitor = _gateway(kwargs).start_monitor(payload)
     except Exception as exc:
         return _error(str(exc))
