@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,11 @@ def _error(error_code: str, message: str | None = None, **extra: Any) -> str:
         payload["message"] = message
     payload.update(extra)
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _candidate_id_from_name(candidate_name: str, index: int) -> str:
+    normalized = re.sub(r"[^A-Za-z0-9]+", "_", candidate_name.strip().lower()).strip("_")
+    return normalized or f"candidate_{index}"
 
 
 def extract_resume_text(args: dict[str, Any], **_kw: Any) -> str:
@@ -55,11 +61,12 @@ def screen_resumes(args: dict[str, Any], **_kw: Any) -> str:
             errors.append(result)
             continue
         source_path = str(result["source_path"])
-        candidate_id = Path(source_path).stem or f"candidate_{index}"
+        candidate_name = str(result.get("candidate_name") or "").strip()
+        candidate_id = _candidate_id_from_name(candidate_name, index)
         extracted.append(
             {
                 "candidate_id": candidate_id,
-                "display_name_zh": candidate_id,
+                "display_name_zh": candidate_name or candidate_id,
                 "source_path": source_path,
                 "text": str(result["text"]),
                 "text_sha256": str(result["text_sha256"]),
