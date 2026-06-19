@@ -562,18 +562,21 @@ def _normalize_attendee_spec(raw_item: Any) -> dict[str, str | None]:
     return normalized
 
 
-def _parse_time(value: str, timezone_name: str) -> datetime:
+def _parse_time(value: str, timezone_name: str, *, allow_past: bool = False) -> datetime:
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        try:
-            parsed = datetime.strptime(value, "%Y-%m-%d %H:%M")
-        except ValueError as exc:
-            raise FeishuSkillError(f"Unsupported time format: {value}") from exc
-    timezone = ZoneInfo(timezone_name)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone)
-    return parsed.astimezone(timezone)
+        from agents.temporal_resolution import normalize_calendar_instant
+    except Exception as exc:
+        raise FeishuSkillError("Semantier temporal normalizer is unavailable") from exc
+
+    try:
+        normalized = normalize_calendar_instant(
+            value=value,
+            timezone_name=timezone_name,
+            allow_past=allow_past,
+        )
+    except ValueError as exc:
+        raise FeishuSkillError(str(exc)) from exc
+    return datetime.fromisoformat(normalized)
 
 
 def _build_time_info(dt: datetime, timezone_name: str) -> dict[str, str]:
@@ -877,7 +880,7 @@ def finalize_negotiation_and_create_meeting(
     if state.status != "agreed" or not state.agreed_slot:
         raise FeishuSkillError("negotiation has not reached an agreement", payload=state.to_dict())
 
-    start_dt = datetime.fromisoformat(state.agreed_slot)
+    start_dt = _parse_time(state.agreed_slot, state.timezone)
     end_dt = datetime.fromtimestamp(start_dt.timestamp() + state.duration_minutes * 60, tz=start_dt.tzinfo)
     attendee_open_ids = sorted(
         attendee_open_id

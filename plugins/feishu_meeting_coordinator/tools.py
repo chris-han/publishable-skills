@@ -94,6 +94,12 @@ class _LocalCronClient:
 
             return any(str(job.get("id") or "") == str(cron_job_id) for job in list_jobs(include_disabled=True))
 
+    def get_job(self, cron_job_id: str) -> dict[str, Any] | None:
+        with self._bind():
+            from cron.jobs import get_job
+
+            return get_job(cron_job_id)
+
     def disable_job(self, cron_job_id: str) -> None:
         with self._bind():
             from cron.jobs import update_job
@@ -678,6 +684,36 @@ def feishu_chat_members_get(args, **kwargs):
     )
 
 
+def _normalize_temporal_slots(
+    values: list[str],
+    *,
+    timezone_name: str,
+    allow_past: bool = False,
+) -> list[str]:
+    from agents.temporal_resolution import normalize_calendar_slots
+
+    return normalize_calendar_slots(
+        values,
+        timezone_name=timezone_name,
+        allow_past=allow_past,
+    )
+
+
+def _normalize_temporal_window_payload(payload: dict[str, Any]) -> None:
+    from agents.temporal_resolution import normalize_calendar_window
+
+    timezone_name = str(payload.get("timezone") or "Asia/Shanghai")
+    window = normalize_calendar_window(
+        start_time=str(payload.get("start_time") or ""),
+        end_time=str(payload.get("end_time") or ""),
+        timezone_name=timezone_name,
+        allow_past=bool(payload.get("allow_past")),
+    )
+    payload["start_time"] = window.start_time
+    payload["end_time"] = window.end_time
+    payload["timezone"] = window.timezone
+
+
 def feishu_meeting_create(args, **kwargs):
     payload = _payload(args)
     if payload.get("is_recurrent_meeting") is True:
@@ -700,6 +736,10 @@ def feishu_meeting_create(args, **kwargs):
     )
     if not attendees:
         return _error("at least one non-requester attendee is required")
+    try:
+        _normalize_temporal_window_payload(payload)
+    except Exception as exc:
+        return _error(str(exc))
     try:
         result = _feishu_helper().create_meeting(
             title=str(payload.get("title") or ""),
@@ -775,6 +815,15 @@ def _start_rsvp_monitor_for_created_meeting(
 
 def feishu_meeting_negotiation_start(args, **kwargs):
     payload = _payload(args)
+    timezone_name = str(payload.get("timezone") or "Asia/Shanghai")
+    try:
+        candidate_slots = _normalize_temporal_slots(
+            [str(item) for item in _list_arg(payload, "candidate_slots", "candidate_slot")],
+            timezone_name=timezone_name,
+            allow_past=bool(payload.get("allow_past")),
+        )
+    except Exception as exc:
+        return _error(str(exc))
     return _helper_call(
         "start_negotiation",
         title=str(payload.get("title") or ""),
@@ -782,11 +831,9 @@ def feishu_meeting_negotiation_start(args, **kwargs):
         attendee_open_ids=[
             str(item) for item in _list_arg(payload, "attendee_open_ids", "attendee_open_id")
         ],
-        candidate_slots=[
-            str(item) for item in _list_arg(payload, "candidate_slots", "candidate_slot")
-        ],
+        candidate_slots=candidate_slots,
         duration_minutes=int(payload.get("duration_minutes") or 0),
-        timezone=str(payload.get("timezone") or "Asia/Shanghai"),
+        timezone=timezone_name,
         max_rounds=int(payload.get("max_rounds") or 3),
     )
 
@@ -801,12 +848,27 @@ def feishu_meeting_negotiation_next_round_prompts(args, **kwargs):
 
 def feishu_meeting_negotiation_submit_response(args, **kwargs):
     payload = _payload(args)
+    state_payload = payload.get("state") or payload.get("state_payload") or {}
+    timezone_name = str(state_payload.get("timezone") or payload.get("timezone") or "Asia/Shanghai")
+    try:
+        accepted_slots = _normalize_temporal_slots(
+            [str(item) for item in _list_arg(payload, "accepted_slots", "accepted_slot")],
+            timezone_name=timezone_name,
+            allow_past=True,
+        )
+        declined_slots = _normalize_temporal_slots(
+            [str(item) for item in _list_arg(payload, "declined_slots", "declined_slot")],
+            timezone_name=timezone_name,
+            allow_past=True,
+        )
+    except Exception as exc:
+        return _error(str(exc))
     return _helper_call(
         "submit_attendee_response",
-        payload.get("state") or payload.get("state_payload") or {},
+        state_payload,
         attendee_open_id=str(payload.get("attendee_open_id") or ""),
-        accepted_slots=[str(item) for item in _list_arg(payload, "accepted_slots", "accepted_slot")],
-        declined_slots=[str(item) for item in _list_arg(payload, "declined_slots", "declined_slot")],
+        accepted_slots=accepted_slots,
+        declined_slots=declined_slots,
         note=payload.get("note"),
     )
 
@@ -834,6 +896,10 @@ def feishu_meeting_attendee_status_list(args, **kwargs):
 
 def feishu_final_invitations_send(args, **kwargs):
     payload = _payload(args)
+    try:
+        _normalize_temporal_window_payload(payload)
+    except Exception as exc:
+        return _error(str(exc))
     return _helper_call(
         "send_final_invitations",
         attendee_open_ids=[
@@ -858,12 +924,21 @@ def feishu_attendee_message_send(args, **kwargs):
 
 def feishu_meeting_new_time_propose(args, **kwargs):
     payload = _payload(args)
+    timezone_name = str(payload.get("timezone") or "Asia/Shanghai")
+    try:
+        candidate_slots = _normalize_temporal_slots(
+            [str(item) for item in _list_arg(payload, "candidate_slots", "candidate_slot")],
+            timezone_name=timezone_name,
+            allow_past=bool(payload.get("allow_past")),
+        )
+    except Exception as exc:
+        return _error(str(exc))
     return _helper_call(
         "propose_new_time",
         attendee_open_ids=[str(item) for item in _list_arg(payload, "attendee_open_ids", "attendee_open_id")],
         title=str(payload.get("title") or ""),
-        candidate_slots=[str(item) for item in _list_arg(payload, "candidate_slots", "candidate_slot")],
-        timezone=str(payload.get("timezone") or "Asia/Shanghai"),
+        candidate_slots=candidate_slots,
+        timezone=timezone_name,
         event_id=payload.get("event_id"),
         current_time=payload.get("current_time"),
         note=payload.get("note"),
@@ -872,6 +947,10 @@ def feishu_meeting_new_time_propose(args, **kwargs):
 
 def feishu_meeting_time_update(args, **kwargs):
     payload = _payload(args)
+    try:
+        _normalize_temporal_window_payload(payload)
+    except Exception as exc:
+        return _error(str(exc))
     return _helper_call(
         "update_meeting_time",
         event_id=str(payload.get("event_id") or ""),
