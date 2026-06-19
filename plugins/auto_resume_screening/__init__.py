@@ -27,3 +27,10 @@ def register(ctx: Any) -> None:
         handler=tools.screen_resumes,
         emoji="✅",
     )
+    ctx.register_tool(
+        name="extract_role_terms",
+        toolset=schemas.TOOLSET_NAME,
+        schema=schemas.EXTRACT_ROLE_TERMS_SCHEMA,
+        handler=tools.extract_role_terms,
+        emoji="🏷️",
+    )

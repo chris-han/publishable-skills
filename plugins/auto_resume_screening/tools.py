@@ -93,3 +93,24 @@ def screen_resumes(args: dict[str, Any], **_kw: Any) -> str:
     response = dict(payload)
     response["artifact_path"] = str(artifact_path)
     return json.dumps(response, ensure_ascii=False)
+
+
+def extract_role_terms(args: dict[str, Any], **_kw: Any) -> str:
+    from .role_terms import extract_missing_role_terms
+
+    source_urls = args.get("source_urls")
+    if source_urls is not None and not isinstance(source_urls, list):
+        return _error("SOURCE_URLS_INVALID", "source_urls must be an array of URLs")
+    timeout_seconds = float(args.get("timeout_seconds") or 15)
+    max_terms_per_source = int(args.get("max_terms_per_source") or 200)
+    if timeout_seconds <= 0:
+        return _error("TIMEOUT_SECONDS_INVALID", "timeout_seconds must be positive")
+    if max_terms_per_source <= 0:
+        return _error("MAX_TERMS_PER_SOURCE_INVALID", "max_terms_per_source must be positive")
+
+    result = extract_missing_role_terms(
+        [str(url) for url in source_urls] if source_urls is not None else None,
+        timeout_seconds=timeout_seconds,
+        max_terms_per_source=max_terms_per_source,
+    )
+    return json.dumps(result, ensure_ascii=False)

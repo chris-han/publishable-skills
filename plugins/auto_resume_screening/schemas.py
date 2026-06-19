@@ -65,3 +65,24 @@ SCREEN_RESUMES_SCHEMA = {
         "required": ["job_profile", "resume_paths"],
     },
 }
+
+EXTRACT_ROLE_TERMS_SCHEMA = {
+    "description": (
+        "Fetch configured occupation index pages and return extracted role terms missing "
+        "from the plugin role-term heuristic."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "source_urls": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Optional source URLs. Defaults to Zhaopin job categories and O*NET all occupations."
+                ),
+            },
+            "timeout_seconds": {"type": "number", "default": 15},
+            "max_terms_per_source": {"type": "integer", "default": 200, "minimum": 1},
+        },
+    },
+}
