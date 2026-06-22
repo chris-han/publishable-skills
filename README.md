@@ -8,6 +8,7 @@ Plugin authoring guidance lives in [docs/derived/semantier-marketplace-plugin-cr
 
 - `feishu_meeting_coordinator`
 - `auto_resume_screening`
+- `automate_excel`
 
 ## Plugin Layout
 
@@ -37,6 +38,12 @@ The auto resume screening plugin is installable from this repository with:
 
 ```text
 chris-han/semantier-skills/plugins/auto_resume_screening
+```
+
+The automate Excel plugin is installable from this repository with:
+
+```text
+chris-han/semantier-skills/plugins/automate_excel
 ```
 
 ## Marketplace URL

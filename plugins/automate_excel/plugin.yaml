@@ -1,0 +1,9 @@
+name: automate_excel
+version: 0.1.0
+description: Deterministic Excel and CSV automation tools for Semantier workspaces.
+author: Semantier
+kind: standalone
+platforms:
+  - linux
+  - macos
+  - windows
