@@ -3,9 +3,11 @@
 校验 Excel 表：检查必须列、空行、重复键等。
 用法:
   python validate_excel.py --input data.xlsx
+  python validate_excel.py --input data.csv --encoding gb18030 --header-row 2
   python validate_excel.py --input data.xlsx --require-cols 名称,金额 --key-cols 编号
 """
 import argparse
+import csv
 import sys
 from pathlib import Path
 
@@ -16,12 +18,66 @@ def _excel_engine(path):
     return "xlrd" if Path(path).suffix.lower() == ".xls" else "openpyxl"
 
 
+def _header_arg(value):
+    if value == "":
+        return 0
+    row = int(value)
+    if row <= 0:
+        return None
+    return row - 1
+
+
+def _read_csv_with_standard_reader(path, *, encoding, header_row):
+    rows = list(csv.reader(path.read_text(encoding=encoding).splitlines(), delimiter=","))
+    header_index = max(int(header_row) - 1, 0)
+    if header_index >= len(rows):
+        return pd.DataFrame()
+    headers = [str(value).strip() or f"column_{index + 1}" for index, value in enumerate(rows[header_index])]
+    records = []
+    for row in rows[header_index + 1 :]:
+        padded = [str(value).strip() for value in row[: len(headers)]]
+        if len(padded) < len(headers):
+            padded.extend([""] * (len(headers) - len(padded)))
+        records.append(padded)
+    return pd.DataFrame(records, columns=headers)
+
+
+def _read_table(path, args):
+    header = _header_arg(args.header_row)
+    if path.suffix.lower() == ".csv":
+        header_row = int(args.header_row) if str(args.header_row).strip() else 1
+        skiprows = range(header_row - 1) if header_row > 1 else None
+        csv_kwargs = {
+            "encoding": args.encoding,
+            "header": None if header_row <= 0 else 0,
+            "skiprows": skiprows,
+            "sep": None,
+            "engine": "python",
+        }
+        try:
+            return pd.read_csv(path, **csv_kwargs)
+        except Exception:
+            return _read_csv_with_standard_reader(
+                path,
+                encoding=args.encoding,
+                header_row=header_row,
+            )
+    return pd.read_excel(
+        path,
+        sheet_name=args.sheet,
+        engine=_excel_engine(path),
+        header=header,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="校验 Excel 表结构与数据")
-    parser.add_argument("--input", "-i", required=True, help="输入 .xlsx 文件")
+    parser.add_argument("--input", "-i", required=True, help="输入 .xlsx/.xls/.csv 文件")
     parser.add_argument("--sheet", default=0, help="工作表名或索引")
     parser.add_argument("--key-cols", default="", help="用于检查重复的列名，逗号分隔")
     parser.add_argument("--require-cols", default="", help="必须存在的列名，逗号分隔")
+    parser.add_argument("--encoding", default="utf-8", help="CSV 文件编码")
+    parser.add_argument("--header-row", default="", help="表头行号，1 基；0 表示无表头")
     args = parser.parse_args()
 
     path = Path(args.input)
@@ -30,7 +86,7 @@ def main():
         sys.exit(1)
 
     try:
-        df = pd.read_excel(path, sheet_name=args.sheet, engine=_excel_engine(path))
+        df = _read_table(path, args)
     except Exception as e:
         print(f"读取失败: {e}", file=sys.stderr)
         sys.exit(1)

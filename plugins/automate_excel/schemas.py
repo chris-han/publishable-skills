@@ -113,6 +113,8 @@ VALIDATE_EXCEL_FILE_SCHEMA = _schema(
         "sheet": _SHEET,
         "key_cols": {"type": "string"},
         "require_cols": {"type": "string"},
+        "encoding": _ENCODING,
+        "header_row": {"type": "integer", "minimum": 0},
     },
     ("input",),
 )

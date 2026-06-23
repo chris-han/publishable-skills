@@ -149,6 +149,8 @@ def validate_excel_file(args: dict[str, Any], **_kw: Any) -> str:
     _append(argv, "--sheet", args.get("sheet"))
     _append(argv, "--key-cols", args.get("key_cols"))
     _append(argv, "--require-cols", args.get("require_cols"))
+    _append(argv, "--encoding", args.get("encoding"))
+    _append(argv, "--header-row", args.get("header_row"))
     return _run("validate_excel.py", argv)
 
 
