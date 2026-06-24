@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import zipfile
 from pathlib import Path
@@ -287,8 +288,61 @@ def _read_pdf(path: Path) -> str:
             close()
 
 
+def _session_env(name: str) -> str:
+    try:
+        from gateway.session_context import get_session_env
+
+        return get_session_env(name, "") or os.getenv(name, "")
+    except Exception:
+        return os.getenv(name, "")
+
+
+def _active_workspace_home() -> str:
+    try:
+        from runtime_paths import current_workspace_hermes_home
+
+        value = current_workspace_hermes_home()
+        if value:
+            return value
+    except Exception:
+        pass
+    return _session_env("HERMES_SESSION_HERMES_HOME") or os.getenv("HERMES_HOME", "")
+
+
+def _resolve_resume_path(path: Path) -> Path:
+    expanded = path.expanduser()
+    if expanded.exists() or expanded.is_absolute():
+        return expanded
+    if not path.parts or path.parts[0] != "uploads":
+        return expanded
+
+    relative_parts = path.parts[1:]
+    if not relative_parts or any(part in {"", ".", ".."} for part in relative_parts):
+        return expanded
+
+    workspace_home = _active_workspace_home().strip()
+    session_id = _session_env("HERMES_SESSION_ID").strip()
+    if not workspace_home or not session_id:
+        return expanded
+
+    try:
+        from runtime_paths import workspace_session_runs_root_from_hermes_home
+
+        uploads_root = (
+            workspace_session_runs_root_from_hermes_home(Path(workspace_home), session_id).parent
+            / "uploads"
+        )
+        candidate = (uploads_root / Path(*relative_parts)).resolve()
+        resolved_root = uploads_root.resolve()
+    except Exception:
+        return expanded
+    if candidate != resolved_root and resolved_root in candidate.parents:
+        return candidate
+    return expanded
+
+
 def extract_text_from_resume(path: Path) -> dict[str, Any]:
-    resolved = path.expanduser()
+    resolved = _resolve_resume_path(path)
     if not resolved.exists():
         return {
             "status": "error",
