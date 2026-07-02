@@ -4,7 +4,8 @@ import importlib.util
 import json
 import os
 import sys
-from datetime import datetime, timezone
+import textwrap
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,14 @@ def _gateway(kwargs: dict[str, Any]):
     if gateway is None:
         gateway = _default_gateway()
     return gateway
+
+
+def _hydrate_saved_gateway_env() -> None:
+    try:
+        from agents.hermes_embedded_gateway import _hydrate_saved_feishu_gateway_env
+    except Exception:
+        return
+    _hydrate_saved_feishu_gateway_env()
 
 
 class _LocalCronClient:
@@ -50,6 +59,83 @@ class _LocalCronClient:
                 resolved.append(skill_name)
         return resolved
 
+    def _ensure_no_agent_script(self, *, profile: str, script: str, name: str) -> None:
+        try:
+            from hermes_cli.profiles import normalize_profile_name, resolve_profile_env
+
+            profile_home = Path(resolve_profile_env(normalize_profile_name(profile))).resolve()
+        except Exception as exc:
+            raise RuntimeError(f"failed to resolve meeting coordinator profile {profile!r}: {exc}") from exc
+        scripts_dir = profile_home / "scripts"
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        script_path = (scripts_dir / script).resolve()
+        try:
+            script_path.relative_to(scripts_dir.resolve())
+        except ValueError as exc:
+            raise RuntimeError(f"blocked monitor script path outside profile scripts dir: {script!r}") from exc
+        state_dir_raw = os.environ.get("SEMANTIER_LOCAL_STATE_DIR")
+        if not state_dir_raw:
+            raise RuntimeError("SEMANTIER_LOCAL_STATE_DIR is required for no-agent meeting coordinator cron")
+        state_dir = Path(state_dir_raw).expanduser().resolve()
+        workspace_id = self.hermes_home.name
+        auth_db_path = Path(os.environ.get("SEMANTIER_AUTH_DB_PATH") or state_dir / "auth.db").expanduser().resolve()
+        plugin_dir = self.hermes_home / "plugins" / "feishu_meeting_coordinator"
+        plugin_loader = f"""
+                plugin_tools_path = Path({str(plugin_dir)!r}) / "tools.py"
+                spec = importlib.util.spec_from_file_location(
+                    "semantier_feishu_meeting_coordinator_tools",
+                    plugin_tools_path,
+                )
+                if spec is None or spec.loader is None:
+                    raise RuntimeError(f"failed to load plugin tools from {{plugin_tools_path}}")
+                plugin_tools = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(plugin_tools)
+        """
+        monitor_prefix = "meeting-rsvp-monitor:"
+        delivery_prefix = "meeting-rsvp-delivery-retry:"
+        if name.startswith(monitor_prefix):
+            monitor_id = name[len(monitor_prefix):].strip()
+            if not monitor_id:
+                raise RuntimeError("missing monitor id for no-agent meeting coordinator job")
+            invocation = f"""
+                result_text = plugin_tools.feishu_meeting_monitor_tick({{"monitor_id": {monitor_id!r}}})
+            """
+        elif name.startswith(delivery_prefix):
+            retry_workspace_id = name[len(delivery_prefix):].strip()
+            if retry_workspace_id != workspace_id:
+                raise RuntimeError("delivery retry cron workspace does not match Hermes home")
+            invocation = f"""
+                result_text = plugin_tools.feishu_meeting_escalation_retry_tick(
+                    {{"workspace_id": {workspace_id!r}}}
+                )
+            """
+        else:
+            raise RuntimeError(f"unsupported no-agent meeting coordinator job {name!r}")
+        script_text = (
+            "from __future__ import annotations\n\n"
+            "import importlib.util\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n\n"
+            'profile_home = Path(os.environ["HERMES_HOME"]).resolve()\n'
+            f'os.environ["SEMANTIER_LOCAL_STATE_DIR"] = {str(state_dir)!r}\n'
+            f'os.environ["SEMANTIER_AUTH_DB_PATH"] = {str(auth_db_path)!r}\n'
+            f'os.environ["SEMANTIER_WORKSPACE_ID"] = {workspace_id!r}\n'
+            f'os.environ.setdefault("HERMES_SESSION_WORKSPACE_OWNER_ID", {workspace_id!r})\n\n'
+            f"{textwrap.dedent(plugin_loader).strip()}\n\n"
+            f"{textwrap.dedent(invocation).strip()}\n"
+            "try:\n"
+            "    payload = json.loads(result_text)\n"
+            "except json.JSONDecodeError:\n"
+            "    print(result_text)\n"
+            "    raise SystemExit(1)\n"
+            "if not payload.get(\"ok\"):\n"
+            "    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))\n"
+            "    raise SystemExit(1)\n"
+            'print(json.dumps({"wakeAgent": False, "result": payload.get("result")}, ensure_ascii=False, sort_keys=True))\n'
+        )
+        script_path.write_text(script_text, encoding="utf-8")
+
     def ensure_job(
         self,
         *,
@@ -60,11 +146,17 @@ class _LocalCronClient:
         skills: list[str],
         deliver: str,
         repeat: int,
+        no_agent: bool = False,
+        script: str | None = None,
     ) -> str:
         with self._bind():
             from cron.jobs import create_job, list_jobs, update_job
 
             resolved_skills = self._workspace_skill_refs(skills)
+            if no_agent:
+                if not script:
+                    raise RuntimeError("no-agent meeting coordinator cron requires a script")
+                self._ensure_no_agent_script(profile=profile, script=script, name=name)
             for job in list_jobs(include_disabled=True):
                 if str(job.get("name") or "") != name:
                     continue
@@ -74,6 +166,16 @@ class _LocalCronClient:
                     updates["enabled"] = True
                 if list(job.get("skills") or []) != resolved_skills:
                     updates["skills"] = resolved_skills
+                if bool(job.get("no_agent")) is not bool(no_agent):
+                    updates["no_agent"] = bool(no_agent)
+                if (job.get("script") or None) != script:
+                    updates["script"] = script
+                if no_agent and str(job.get("model") or ""):
+                    updates["model"] = None
+                if no_agent and str(job.get("provider") or ""):
+                    updates["provider"] = None
+                if no_agent and str(job.get("base_url") or ""):
+                    updates["base_url"] = None
                 if updates:
                     update_job(job_id, updates)
                 return job_id
@@ -85,6 +187,8 @@ class _LocalCronClient:
                 deliver=deliver,
                 repeat=repeat,
                 profile=profile,
+                no_agent=no_agent,
+                script=script,
             )
             return str(job["id"])
 
@@ -180,7 +284,7 @@ class _DefaultGateway:
         return meeting_coordinator_gateway.escalation_retry_tick(
             payload,
             store=meeting_coordinator_store.MeetingCoordinatorStore(),
-            delivery_client=_feishu_helper(),
+            delivery_client=_CreatorDeliveryClient(),
         )
 
     def requeue_delivery_task(self, *, delivery_task_id: str, reason: str) -> dict[str, Any]:
@@ -232,6 +336,7 @@ class _CreatorDeliveryClient:
         target = f"{platform}:{chat_id}:{thread_id}" if thread_id else f"{platform}:{chat_id}"
         cron = _LocalCronClient(hermes_home)
         with cron._bind():
+            _hydrate_saved_gateway_env()
             from tools.send_message_tool import send_message_tool
 
             raw = send_message_tool(
@@ -703,9 +808,25 @@ def _normalize_temporal_slots(
 
 
 def _normalize_temporal_window_payload(payload: dict[str, Any]) -> None:
-    from agents.temporal_resolution import normalize_calendar_window
+    from agents.temporal_resolution import normalize_calendar_instant, normalize_calendar_window, parse_local_datetime
 
     timezone_name = str(payload.get("timezone") or "Asia/Shanghai")
+    if not str(payload.get("end_time") or "").strip() and payload.get("duration_minutes") is not None:
+        try:
+            duration_minutes = int(payload.get("duration_minutes"))
+        except (TypeError, ValueError):
+            raise ValueError("duration_minutes must be an integer") from None
+        if duration_minutes <= 0:
+            raise ValueError("duration_minutes must be greater than zero")
+        start_dt = parse_local_datetime(
+            normalize_calendar_instant(
+                value=str(payload.get("start_time") or ""),
+                timezone_name=timezone_name,
+                allow_past=bool(payload.get("allow_past")),
+            ),
+            timezone_name,
+        )
+        payload["end_time"] = (start_dt + timedelta(minutes=duration_minutes)).isoformat()
     window = normalize_calendar_window(
         start_time=str(payload.get("start_time") or ""),
         end_time=str(payload.get("end_time") or ""),

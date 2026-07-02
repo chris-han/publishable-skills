@@ -70,7 +70,28 @@ _client_instance: Client | None = None
 
 
 def _runtime_value(name: str) -> str:
-    return (os.getenv(name) or "").strip()
+    env_value = (os.getenv(name) or "").strip()
+    if env_value:
+        return env_value
+    try:
+        from gateway.session_context import get_session_env
+    except Exception:
+        return ""
+    return str(get_session_env(name, "") or "").strip()
+
+
+def _runtime_workspace_id() -> str:
+    return (
+        _runtime_value("SEMANTIER_WORKSPACE_ID")
+        or _runtime_value("HERMES_SESSION_WORKSPACE_OWNER_ID")
+    )
+
+
+def _runtime_user_id() -> str:
+    return (
+        _runtime_value("SEMANTIER_USER_ID")
+        or _runtime_value("HERMES_SESSION_WORKSPACE_OWNER_ID")
+    )
 
 
 def _auth_db_path() -> Path:
@@ -88,8 +109,8 @@ def _auth_db_path() -> Path:
 
 
 def _resolve_runtime_feishu_config() -> dict[str, Any]:
-    workspace_id = _runtime_value("SEMANTIER_WORKSPACE_ID")
-    user_id = _runtime_value("SEMANTIER_USER_ID")
+    workspace_id = _runtime_workspace_id()
+    user_id = _runtime_user_id()
     if not workspace_id and not user_id:
         raise FeishuSkillError(
             "Semantier workspace or user identity is unavailable; expected SEMANTIER_WORKSPACE_ID or SEMANTIER_USER_ID"

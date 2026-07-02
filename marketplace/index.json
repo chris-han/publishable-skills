@@ -4,6 +4,7 @@
     {
       "id": "chris-han/semantier-skills/plugins/feishu_meeting_coordinator",
       "name": "feishu_meeting_coordinator",
+      "version": "0.1.0",
       "type": "plugin",
       "path": "plugins/feishu_meeting_coordinator",
       "description": "Feishu meeting RSVP monitoring and follow-up orchestration",
@@ -18,6 +19,7 @@
     {
       "id": "chris-han/semantier-skills/plugins/auto_resume_screening",
       "name": "auto_resume_screening",
+      "version": "0.1.0",
       "type": "plugin",
       "path": "plugins/auto_resume_screening",
       "description": "Deterministic resume screening tools for Semantier workspaces",
